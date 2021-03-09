@@ -82,3 +82,11 @@ class RWLock(object):
 
     read_release = release
     write_release = release
+
+    def __repr__(self):
+        s = '<RWLock '
+        s += 'read_waiter: ' + str(self.read_waiter) + ', '
+        s += 'write_waiter: ' + str(self.write_waiter) + ', '
+        s += 'state: ' + str(self.state) + ', '
+        s += 'write_first: ' + str(self.write_first) + '>'
+        return s
