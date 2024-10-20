@@ -1,1 +1,1 @@
-from .RWLock import RWLock
+from .RWLock import RWLock, Mode

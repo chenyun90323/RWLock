@@ -1,7 +1,13 @@
 import threading
+from enum import Enum
+
+class Mode(Enum):
+    Unset = -1
+    Write = 0
+    Read  = 1
 
 class RWLock(object):
-    def __init__(self, write_first=True):
+    def __init__(self, write_first = True):
         self.lock = threading.Lock()
         self.rcond = threading.Condition(self.lock)
         self.wcond = threading.Condition(self.lock)
@@ -10,8 +16,9 @@ class RWLock(object):
         self.state = 0                 # 正数：表示正在读操作的线程数   负数：表示正在写操作的线程数（最多-1）
         self.owners = []               # 正在操作的线程id集合
         self.write_first = write_first # 默认写优先，False表示读优先
+        self.mode = Mode.Unset         # 对上下文管理器with\as使用
 
-    def write_acquire(self, blocking=True):
+    def write_acquire(self, blocking = True):
         # 获取写锁只有当锁没人占用，或者当前线程已经占用
         me = threading.get_ident()
         with self.lock:
@@ -23,7 +30,7 @@ class RWLock(object):
                 self.write_waiter -= 1
         return True
 
-    def _write_acquire(self, me):
+    def _write_acquire(self, me: int):
         # 获取写锁只有当锁没人占用，或者当前线程已经占用
         if self.state == 0 or (self.state < 0 and me in self.owners):
             self.state -= 1
@@ -33,7 +40,7 @@ class RWLock(object):
             raise RuntimeError('cannot recursively wrlock a rdlocked lock')
         return False
 
-    def read_acquire(self, blocking=True):
+    def read_acquire(self, blocking = True):
         # 获取读锁只有当写锁没人占用，或者当前线程已经占用
         me = threading.get_ident()
         with self.lock:
@@ -45,7 +52,7 @@ class RWLock(object):
                 self.read_waiter -= 1
         return True
 
-    def _read_acquire(self, me):
+    def _read_acquire(self, me: int):
         if self.state < 0:
             # 如果锁被写锁占用
             return False
@@ -82,6 +89,27 @@ class RWLock(object):
 
     read_release = release
     write_release = release
+
+    def __enter__(self):
+        if self.mode == Mode.Write:
+            self.write_acquire()
+        elif self.mode == Mode.Read:
+            self.read_acquire()
+        else:
+            raise Exception(f'{self} 模式错误: {self.mode}')
+        return self
+
+    def __exit__(self, *exc_info):
+        if self.mode == Mode.Write:
+            self.write_release()
+        elif self.mode == Mode.Read:
+            self.read_release()
+        else:
+            raise Exception(f'{self} 模式错误: {self.mode}')
+
+    def __call__(self, mode: Mode):
+        self.mode = mode
+        return self
 
     def __repr__(self):
         s = '<RWLock '
